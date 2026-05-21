@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Pancko Tinto v0.4</title>
+<title>Pancko Tinto v0.5</title>
 <style>
   :root{
     --bg:#0f172a;--card:#111827;--card2:#1f2937;--txt:#f8fafc;--muted:#94a3b8;
@@ -44,7 +44,7 @@
 </head>
 <body>
 <header>
-  <h1>Pancko Tinto <span class="muted">v0.4 test</span></h1>
+  <h1>Pancko Tinto <span class="muted">v0.5 test</span></h1>
   <nav>
     <button id="btnPresu" class="active" onclick="showTab('presu')">Presupuesto</button>
     <button id="btnLab" onclick="showTab('lab')">Consulta laboratorio</button>
@@ -159,6 +159,11 @@ let colorantPrices={};
 
 function money(n){ n=Number(n||0); return '$ ' + n.toLocaleString('es-AR',{maximumFractionDigits:2}); }
 function num(v){ if(v===undefined||v===null) return 0; return Number(String(v).replace(',','.'))||0; }
+function roundPulse(v){ return Math.round((Number(v)||0) / 0.125) * 0.125; }
+function fmtPulse(v){
+  const n = roundPulse(v);
+  return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/0+$/,'').replace(/\.$/,'');
+}
 function norm(s){ return String(s||'').trim().toUpperCase(); }
 function normKey(s){ return norm(s).replace(/\s+/g,' '); }
 
@@ -391,9 +396,10 @@ function calcRecipeForProduct(p, color){
   const factor = found.factor;
   const parts=parseFormula(rec.formula_1l);
   const lines=parts.map(x=>{
-    const pulsos=x.pulsos1*factor;
+    const pulsosRaw=x.pulsos1*factor;
+    const pulsos=roundPulse(pulsosRaw);
     const precioPulso=num(colorantPrices[x.colorante]);
-    return {...x, pulsos, precioPulso, subtotal:pulsos*precioPulso};
+    return {...x, pulsosRaw, pulsos, precioPulso, subtotal:pulsos*precioPulso};
   });
   const tintCost=lines.reduce((a,b)=>a + b.subtotal,0);
   return {
@@ -470,12 +476,12 @@ function renderLabInfo(){
 
 function pulseToOz(p){
   const sign = p < 0 ? '-' : '';
-  p=Math.abs(p);
+  p=Math.abs(roundPulse(p));
   const oz=Math.floor(p/48);
-  const rem=+(p-oz*48).toFixed(2);
-  if(oz>0 && rem>0) return `${sign}${oz} oz + ${rem} p`;
+  const rem=roundPulse(p-oz*48);
+  if(oz>0 && rem>0) return `${sign}${oz} oz + ${fmtPulse(rem)} p`;
   if(oz>0) return `${sign}${oz} oz`;
-  return `${sign}${rem} p`;
+  return `${sign}${fmtPulse(rem)} p`;
 }
 
 function calcLab(){
@@ -492,11 +498,12 @@ Color: ${rec.idcolor}
 Base fórmula: ${res.base_formula}
 Base física: ${res.base_fisica}
 Factor: ${Number(res.factor.toFixed(6))}
+Redondeo: 0.125 pulso
 ${rec.descripcion?`Descripción: ${rec.descripcion}`:''}</div>
     ${res.lines.map(x=>`
       <div class="formulaLine">
         <b>${x.colorante}</b>
-        <span>${Number(x.pulsos.toFixed(2))} pulsos</span>
+        <span>${fmtPulse(x.pulsos)} pulsos</span>
         <span>${pulseToOz(x.pulsos)}</span>
       </div>`).join('')}
   `;
