@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pancko Tinto v0.3</title>
+<style>
+  :root{
+    --bg:#0f172a;--card:#111827;--card2:#1f2937;--txt:#f8fafc;--muted:#94a3b8;
+    --line:#334155;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--pri:#38bdf8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(135deg,#0f172a,#111827);color:var(--txt)}
+  header{position:sticky;top:0;z-index:10;background:rgba(15,23,42,.96);border-bottom:1px solid var(--line);padding:12px 14px}
+  h1{font-size:20px;margin:0 0 8px}
+  nav{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  button,input,select,textarea{font:inherit}
+  button{border:0;border-radius:14px;padding:12px 14px;background:var(--card2);color:var(--txt);font-weight:700;cursor:pointer}
+  button.active{background:var(--pri);color:#00131f}
+  button.ok{background:var(--ok);color:#052e16}
+  button.warn{background:var(--warn);color:#422006}
+  button.bad{background:var(--bad);color:#450a0a}
+  main{padding:14px;max-width:980px;margin:0 auto 80px}
+  section{display:none}.show{display:block}
+  .card{background:rgba(17,24,39,.92);border:1px solid var(--line);border-radius:20px;padding:14px;margin:12px 0;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+  .grid{display:grid;gap:10px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}
+  label{font-size:13px;color:var(--muted);display:block;margin:0 0 5px}
+  input,select,textarea{width:100%;background:#020617;color:var(--txt);border:1px solid var(--line);border-radius:14px;padding:12px}
+  input:focus,textarea:focus{outline:2px solid var(--pri)}
+  .muted{color:var(--muted);font-size:13px}.big{font-size:22px;font-weight:900}.pill{display:inline-block;padding:5px 9px;border-radius:999px;background:#020617;border:1px solid var(--line);font-size:12px;margin:2px}
+  .oktxt{color:var(--ok)}.warntxt{color:var(--warn)}.badtxt{color:var(--bad)}
+  table{width:100%;border-collapse:collapse;font-size:13px}td,th{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}
+  .formulaBox{font-size:22px;line-height:1.35}
+  .formulaLine{display:flex;justify-content:space-between;gap:12px;border-bottom:1px dashed var(--line);padding:8px 0}
+  .formulaLine b{font-size:26px}
+  .right{text-align:right}
+  .total{font-size:26px;font-weight:900}
+  .hide{display:none!important}
+  .item{background:#020617;border:1px solid var(--line);border-radius:16px;padding:10px;margin:8px 0}
+  .danger{border-color:#7f1d1d;background:#2a0d12}
+  .copy{white-space:pre-wrap;background:#020617;border:1px solid var(--line);border-radius:14px;padding:12px}
+  @media(max-width:700px){.g2,.g3{grid-template-columns:1fr}nav{grid-template-columns:1fr}.formulaBox{font-size:20px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Pancko Tinto <span class="muted">v0.3 test</span></h1>
+  <nav>
+    <button id="btnPresu" class="active" onclick="showTab('presu')">Presupuesto</button>
+    <button id="btnLab" onclick="showTab('lab')">Consulta laboratorio</button>
+    <button id="btnParams" onclick="showTab('params')">Parámetros</button>
+  </nav>
+</header>
+
+<main>
+<section id="presu" class="show">
+  <div class="card">
+    <div class="big">Presupuesto simple</div>
+    <p class="muted">Busca productos comunes o tintables. Si el producto es tintable, cargás el código de color y valida base + calcula tintas.</p>
+    <div class="grid g2">
+      <div>
+        <label>Buscar producto</label>
+        <input id="qProd" list="productosList" placeholder="Ej: RECUPLAST INT TINT 4" oninput="selectProductByText(this.value,'presu')" />
+        <datalist id="productosList"></datalist>
+      </div>
+      <div>
+        <label>Cantidad</label>
+        <input id="qty" type="number" min="1" step="1" value="1" />
+      </div>
+    </div>
+    <div id="prodInfo" class="card" style="margin:10px 0 0"></div>
+    <div id="tintoPresuBox" class="grid g2 hide" style="margin-top:10px">
+      <div>
+        <label>Código de color</label>
+        <input id="colorPresu" list="coloresPresuList" placeholder="Código o descripción: 8302 / Graphite..." onfocus="renderColorOptions('presu')" oninput="renderColorOptions('presu'); calcPresuPreview()" />
+        <datalist id="coloresPresuList"></datalist>
+      </div>
+      <div>
+        <label>Cliente / nota opcional</label>
+        <input id="clientePresu" placeholder="Cliente, obra, referencia..." />
+      </div>
+    </div>
+    <div id="presuPreview" class="card hide"></div>
+    <div class="grid g2" style="margin-top:10px">
+      <button class="ok" onclick="addToBudget()">Agregar al presupuesto</button>
+      <button class="bad" onclick="clearBudget()">Vaciar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="big">Detalle</div>
+    <div id="budgetList" class="muted">Sin ítems todavía.</div>
+    <div class="right total" id="budgetTotal">$ 0</div>
+  </div>
+</section>
+
+<section id="lab">
+  <div class="card">
+    <div class="big">Consulta tintométrica / laboratorio</div>
+    <p class="muted">Elegí producto + código. La pantalla muestra fórmula final con pulsos y onzas para preparar.</p>
+    <div class="grid g2">
+      <div>
+        <label>Producto tintable</label>
+        <input id="qProdLab" list="productosList" placeholder="Ej: RECUPLAST INT TINT 4" oninput="selectProductByText(this.value,'lab')" />
+      </div>
+      <div>
+        <label>Código de color</label>
+        <input id="colorLab" list="coloresLabList" placeholder="Código o descripción: 8302 / Graphite..." onfocus="renderColorOptions('lab')" oninput="renderColorOptions('lab'); calcLab()" />
+        <datalist id="coloresLabList"></datalist>
+      </div>
+    </div>
+    <div id="labInfo" class="card"></div>
+    <button class="warn" onclick="window.print()">Imprimir / etiqueta simple</button>
+  </div>
+  <div class="card">
+    <div class="big">Fórmula</div>
+    <div id="labFormula" class="formulaBox muted">Cargá producto y color.</div>
+  </div>
+</section>
+
+<section id="params">
+  <div class="card">
+    <div class="big">Parámetros CSV</div>
+    <p class="muted">Cargá los dos CSV. Quedan guardados localmente en este navegador.</p>
+    <div class="grid g2">
+      <div>
+        <label>Artículos CSV: articulos_tinto_preparado_v2.csv</label>
+        <input type="file" id="fileArticulos" accept=".csv,text/csv" />
+      </div>
+      <div>
+        <label>Recetas CSV: pancko_tinto_MASTER_COMPACTO_formula_pipe.csv</label>
+        <input type="file" id="fileRecetas" accept=".csv,text/csv" />
+      </div>
+    </div>
+    <div class="grid g3" style="margin-top:10px">
+      <button class="ok" onclick="loadCsvFiles()">Cargar CSV</button>
+      <button onclick="saveAll()">Guardar</button>
+      <button class="bad" onclick="resetAll()">Borrar datos</button>
+    </div>
+    <div id="dataStatus" class="card"></div>
+  </div>
+
+  <div class="card">
+    <div class="big">Precio de colorantes</div>
+    <p class="muted">Precio por pulso. Por ahora manual. Si queda en 0, calcula fórmula pero no suma precio de esa tinta.</p>
+    <div id="colorantPrices"></div>
+    <button class="ok" onclick="saveColorantPrices()">Guardar precios</button>
+  </div>
+</section>
+</main>
+
+<script>
+const LS_ART='pancko_tinto_articulos_v01';
+const LS_REC='pancko_tinto_recetas_v01';
+const LS_PRICES='pancko_tinto_colorant_prices_v01';
+
+let articulos=[], recetas=[], recipeIndex=new Map(), productIndex=new Map(), selectedPresu=null, selectedLab=null, budget=[];
+let colorantPrices={};
+
+function money(n){ n=Number(n||0); return '$ ' + n.toLocaleString('es-AR',{maximumFractionDigits:2}); }
+function num(v){ if(v===undefined||v===null) return 0; return Number(String(v).replace(',','.'))||0; }
+function norm(s){ return String(s||'').trim().toUpperCase(); }
+function normKey(s){ return norm(s).replace(/\s+/g,' '); }
+
+function showTab(id){
+  for(const s of document.querySelectorAll('section')) s.classList.remove('show');
+  document.getElementById(id).classList.add('show');
+  for(const b of document.querySelectorAll('nav button')) b.classList.remove('active');
+  document.getElementById('btn'+id[0].toUpperCase()+id.slice(1))?.classList.add('active');
+  if(id==='params') renderParams();
+}
+
+function parseCSV(text){
+  text = text.replace(/^\uFEFF/,'');
+  const firstLine = text.split(/\r?\n/)[0] || '';
+  const comma = (firstLine.match(/,/g)||[]).length;
+  const semi = (firstLine.match(/;/g)||[]).length;
+  const delim = semi > comma ? ';' : ',';
+  const rows=[]; let row=[], cur='', q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i], nx=text[i+1];
+    if(ch==='"'){
+      if(q && nx==='"'){cur+='"'; i++;}
+      else q=!q;
+    }else if(ch===delim && !q){row.push(cur); cur='';}
+    else if((ch==='\n'||ch==='\r') && !q){
+      if(ch==='\r' && nx==='\n') i++;
+      row.push(cur); cur='';
+      if(row.some(x=>x.trim()!=='')) rows.push(row);
+      row=[];
+    }else cur+=ch;
+  }
+  row.push(cur); if(row.some(x=>x.trim()!=='')) rows.push(row);
+  if(!rows.length) return [];
+  const headers=rows.shift().map(h=>h.trim());
+  return rows.map(r=>{
+    const o={};
+    headers.forEach((h,i)=>o[h]=(r[i]??'').trim());
+    return o;
+  });
+}
+
+function parseFormula(str){
+  return String(str||'')
+    .split(/\s*\|\s*|\s*;\s*/)
+    .map(x=>x.trim()).filter(Boolean)
+    .map(part=>{
+      const m=part.match(/^([^=]+)=(-?\d+(?:[.,]\d+)?)$/);
+      if(!m) return null;
+      return {colorante:m[1].trim().toUpperCase(), pulsos1:num(m[2])};
+    }).filter(Boolean);
+}
+
+function buildIndexes(){
+  recipeIndex.clear(); productIndex.clear();
+  for(const r of recetas){
+    const base=normKey(r.base);
+    const idc=normKey(r.idcolor || r.codigo_formula);
+    if(base && idc) recipeIndex.set(base+'|'+idc, r);
+  }
+  for(const p of articulos){
+    const label = `${p.COD || ''} - ${p.ARTIC || ''}`;
+    productIndex.set(label, p);
+  }
+  renderProductList();
+  renderParams();
+}
+
+function renderProductList(){
+  const dl=document.getElementById('productosList');
+  dl.innerHTML='';
+  articulos.forEach(p=>{
+    const opt=document.createElement('option');
+    opt.value=`${p.COD || ''} - ${p.ARTIC || ''}`;
+    dl.appendChild(opt);
+  });
+}
+
+function selectProductByText(val, mode){
+  const p = productIndex.get(val);
+  if(mode==='presu'){
+    selectedPresu=p||null;
+    renderPresuProduct();
+    calcPresuPreview();
+  }else{
+    selectedLab=p||null;
+    renderLabInfo();
+    calcLab();
+  }
+}
+
+function isTintable(p){ return norm(p?.usa_tinto)==='SI'; }
+
+function renderPresuProduct(){
+  const box=document.getElementById('prodInfo');
+  const tintBox=document.getElementById('tintoPresuBox');
+  const preview=document.getElementById('presuPreview');
+  if(!selectedPresu){
+    box.innerHTML='<span class="muted">Seleccioná un producto.</span>';
+    tintBox.classList.add('hide'); preview.classList.add('hide'); return;
+  }
+  const p=selectedPresu;
+  const tint=isTintable(p);
+  tintBox.classList.toggle('hide', !tint);
+  box.innerHTML = `
+    <div><b>${p.ARTIC||''}</b></div>
+    <div class="muted">COD: ${p.COD||''}</div>
+    <div>Precio: <b>${money(num(p.PR_CON_IVA))}</b></div>
+    ${tint ? `<div><span class="pill">TINTABLE</span><span class="pill">Base ${p.base_tinto}</span><span class="pill">Factor ${p.factor_tinto}</span></div>` : `<div><span class="pill">Producto común</span></div>`}
+  `;
+}
+
+function extractColorId(value){
+  const s = String(value||'').trim();
+  // Acepta valores del datalist tipo: "8302 — Great Graphite [TINT]"
+  if(s.includes(' — ')) return s.split(' — ')[0].trim();
+  if(s.includes(' - ')) return s.split(' - ')[0].trim();
+  return s;
+}
+
+function findRecipe(base, color){
+  const id = extractColorId(color);
+  return recipeIndex.get(normKey(base)+'|'+normKey(id));
+}
+
+function recipeLabel(r){
+  const id = r.idcolor || r.codigo_formula || '';
+  const desc = r.descripcion || '';
+  const base = r.base || '';
+  return `${id} — ${desc} [${base}]`;
+}
+
+function renderColorOptions(mode){
+  const p = mode === 'presu' ? selectedPresu : selectedLab;
+  const input = document.getElementById(mode === 'presu' ? 'colorPresu' : 'colorLab');
+  const list = document.getElementById(mode === 'presu' ? 'coloresPresuList' : 'coloresLabList');
+  if(!p || !isTintable(p)){ list.innerHTML=''; return; }
+
+  const q = normKey(input.value);
+  const base = normKey(p.base_tinto);
+  const matches = [];
+  for(const r of recetas){
+    if(normKey(r.base) !== base) continue;
+    const id = normKey(r.idcolor || r.codigo_formula);
+    const desc = normKey(r.descripcion);
+    if(!q || id.includes(q) || desc.includes(q)){
+      matches.push(r);
+      if(matches.length >= 80) break;
+    }
+  }
+
+  list.innerHTML = matches.map(r => `<option value="${escapeHtml(recipeLabel(r))}"></option>`).join('');
+}
+
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+}
+
+function calcRecipeForProduct(p, color){
+  if(!isTintable(p)) return {ok:false, msg:'Producto no tintable.'};
+  const rec=findRecipe(p.base_tinto, color);
+  if(!rec) return {ok:false, msg:`El color ${color||''} no existe para base ${p.base_tinto}.`};
+  const factor=num(p.factor_tinto);
+  const parts=parseFormula(rec.formula_1l);
+  const lines=parts.map(x=>{
+    const pulsos=x.pulsos1*factor;
+    const precioPulso=num(colorantPrices[x.colorante]);
+    return {...x, pulsos, precioPulso, subtotal:pulsos*precioPulso};
+  });
+  const tintCost=lines.reduce((a,b)=>a + b.subtotal,0);
+  return {ok:true, rec, factor, lines, tintCost};
+}
+
+function calcPresuPreview(){
+  const box=document.getElementById('presuPreview');
+  if(!selectedPresu || !isTintable(selectedPresu)){ box.classList.add('hide'); return; }
+  const color=extractColorId(document.getElementById('colorPresu').value.trim());
+  if(!color){ box.classList.add('hide'); return; }
+  const res=calcRecipeForProduct(selectedPresu,color);
+  box.classList.remove('hide');
+  if(!res.ok){ box.innerHTML=`<div class="badtxt"><b>${res.msg}</b></div>`; return; }
+  const basePrice=num(selectedPresu.PR_CON_IVA);
+  box.innerHTML=`
+    <div class="oktxt"><b>Compatible</b>: ${res.rec.idcolor} / ${res.rec.descripcion||''}</div>
+    <div>Producto: ${money(basePrice)}</div>
+    <div>Tintas: <b>${money(res.tintCost)}</b></div>
+    <div>Total unitario: <b>${money(basePrice+res.tintCost)}</b></div>
+  `;
+}
+
+function addToBudget(){
+  if(!selectedPresu){ alert('Elegí un producto.'); return; }
+  const qty=Math.max(1, num(document.getElementById('qty').value)||1);
+  const p=selectedPresu;
+  let color='', tintCost=0, formula=[], error='';
+  if(isTintable(p)){
+    color=extractColorId(document.getElementById('colorPresu').value.trim());
+    const res=calcRecipeForProduct(p,color);
+    if(!res.ok){ alert(res.msg); return; }
+    tintCost=res.tintCost; formula=res.lines;
+  }
+  const unit=num(p.PR_CON_IVA)+tintCost;
+  budget.push({p, qty, color, tintCost, unit, formula, cliente:document.getElementById('clientePresu').value.trim()});
+  renderBudget();
+}
+
+function renderBudget(){
+  const box=document.getElementById('budgetList');
+  if(!budget.length){ box.innerHTML='<span class="muted">Sin ítems todavía.</span>'; document.getElementById('budgetTotal').textContent=money(0); return; }
+  let total=0;
+  box.innerHTML=budget.map((it,idx)=>{
+    const line=it.unit*it.qty; total+=line;
+    return `<div class="item">
+      <b>${idx+1}) ${it.p.ARTIC}</b>
+      <div class="muted">COD: ${it.p.COD} · Cant: ${it.qty}</div>
+      ${it.color?`<div>Color: <b>${it.color}</b> · Base: ${it.p.base_tinto} · Tintas: ${money(it.tintCost)}</div>`:''}
+      ${it.cliente?`<div class="muted">Cliente/nota: ${it.cliente}</div>`:''}
+      <div class="right"><b>${money(line)}</b></div>
+    </div>`;
+  }).join('');
+  document.getElementById('budgetTotal').textContent=money(total);
+}
+function clearBudget(){ budget=[]; renderBudget(); }
+
+function renderLabInfo(){
+  const box=document.getElementById('labInfo');
+  if(!selectedLab){ box.innerHTML='<span class="muted">Seleccioná producto.</span>'; return; }
+  const p=selectedLab;
+  box.innerHTML=`<b>${p.ARTIC||''}</b><br>
+    <span class="muted">COD: ${p.COD||''}</span><br>
+    ${isTintable(p)?`<span class="pill">Base ${p.base_tinto}</span><span class="pill">Factor ${p.factor_tinto}</span>`:`<span class="pill">No tintable</span>`}`;
+}
+
+function pulseToOz(p){
+  const sign = p < 0 ? '-' : '';
+  p=Math.abs(p);
+  const oz=Math.floor(p/48);
+  const rem=+(p-oz*48).toFixed(2);
+  if(oz>0 && rem>0) return `${sign}${oz} oz + ${rem} p`;
+  if(oz>0) return `${sign}${oz} oz`;
+  return `${sign}${rem} p`;
+}
+
+function calcLab(){
+  const out=document.getElementById('labFormula');
+  if(!selectedLab){ out.innerHTML='Cargá producto.'; return; }
+  const color=extractColorId(document.getElementById('colorLab').value.trim());
+  if(!color){ out.innerHTML='Cargá código de color.'; return; }
+  const res=calcRecipeForProduct(selectedLab,color);
+  if(!res.ok){ out.innerHTML=`<div class="badtxt">${res.msg}</div>`; return; }
+  const p=selectedLab, rec=res.rec;
+  out.innerHTML=`
+    <div class="copy"><b>${p.ARTIC}</b>
+Color: ${rec.idcolor}
+Base: ${p.base_tinto}
+Factor: ${p.factor_tinto}
+${rec.descripcion?`Descripción: ${rec.descripcion}`:''}</div>
+    ${res.lines.map(x=>`
+      <div class="formulaLine">
+        <b>${x.colorante}</b>
+        <span>${Number(x.pulsos.toFixed(2))} pulsos</span>
+        <span>${pulseToOz(x.pulsos)}</span>
+      </div>`).join('')}
+  `;
+}
+
+async function readFile(file){
+  if(!file) return null;
+  return await file.text();
+}
+async function loadCsvFiles(){
+  const fa=document.getElementById('fileArticulos').files[0];
+  const fr=document.getElementById('fileRecetas').files[0];
+  if(fa){ articulos=parseCSV(await readFile(fa)); }
+  if(fr){ recetas=parseCSV(await readFile(fr)); }
+  buildIndexes();
+  saveAll();
+}
+function saveAll(){
+  localStorage.setItem(LS_ART, JSON.stringify(articulos));
+  localStorage.setItem(LS_REC, JSON.stringify(recetas));
+  localStorage.setItem(LS_PRICES, JSON.stringify(colorantPrices));
+  renderParams();
+  alert('Guardado local.');
+}
+function loadAll(){
+  articulos=JSON.parse(localStorage.getItem(LS_ART)||'[]');
+  recetas=JSON.parse(localStorage.getItem(LS_REC)||'[]');
+  colorantPrices=JSON.parse(localStorage.getItem(LS_PRICES)||'{}');
+  buildIndexes();
+}
+function resetAll(){
+  if(!confirm('¿Borrar datos locales?')) return;
+  localStorage.removeItem(LS_ART); localStorage.removeItem(LS_REC); localStorage.removeItem(LS_PRICES);
+  articulos=[]; recetas=[]; colorantPrices={}; buildIndexes();
+}
+function renderParams(){
+  const tintables=articulos.filter(isTintable).length;
+  const bases={};
+  for(const p of articulos.filter(isTintable)) bases[p.base_tinto]=(bases[p.base_tinto]||0)+1;
+  document.getElementById('dataStatus').innerHTML=`
+    <div><b>Artículos:</b> ${articulos.length} · <b>Tintables:</b> ${tintables}</div>
+    <div><b>Recetas:</b> ${recetas.length}</div>
+    <div>${Object.entries(bases).map(([k,v])=>`<span class="pill">${k}: ${v}</span>`).join(' ')}</div>
+  `;
+  renderColorantPrices();
+}
+function renderColorantPrices(){
+  const set=new Set();
+  for(const r of recetas) parseFormula(r.formula_1l).forEach(x=>set.add(x.colorante));
+  const arr=[...set].sort();
+  const box=document.getElementById('colorantPrices');
+  if(!arr.length){ box.innerHTML='<span class="muted">Cargá recetas para detectar colorantes.</span>'; return; }
+  box.innerHTML=`<div class="grid g3">`+arr.map(c=>`
+    <div>
+      <label>${c}</label>
+      <input data-colorant="${c}" type="number" step="0.0001" value="${colorantPrices[c]??0}">
+    </div>`).join('')+`</div>`;
+}
+function saveColorantPrices(){
+  document.querySelectorAll('[data-colorant]').forEach(inp=>{
+    colorantPrices[inp.dataset.colorant]=num(inp.value);
+  });
+  localStorage.setItem(LS_PRICES, JSON.stringify(colorantPrices));
+  alert('Precios de colorantes guardados.');
+}
+
+loadAll();
+renderBudget();
+renderPresuProduct();
+renderLabInfo();
+</script>
+</body>
+</html>
