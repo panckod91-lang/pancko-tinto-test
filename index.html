@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Pancko Tinto v0.5</title>
+<title>Pancko Tinto v0.6</title>
 <style>
   :root{
     --bg:#0f172a;--card:#111827;--card2:#1f2937;--txt:#f8fafc;--muted:#94a3b8;
@@ -44,7 +44,7 @@
 </head>
 <body>
 <header>
-  <h1>Pancko Tinto <span class="muted">v0.5 test</span></h1>
+  <h1>Pancko Tinto <span class="muted">v0.6 test</span></h1>
   <nav>
     <button id="btnPresu" class="active" onclick="showTab('presu')">Presupuesto</button>
     <button id="btnLab" onclick="showTab('lab')">Consulta laboratorio</button>
@@ -307,6 +307,16 @@ function factorForSpecial(p, base){
     return factor30;
   }
 
+  if(tipo === 'BASE_REVESTIMIENTO'){
+    // Regla de laboratorio/manual:
+    // 5 kg equivale a patrón 4 L; 25 kg equivale a patrón 20 L.
+    // ACCENT 100%, PASTEL 25%, TINT 40%, DEEP 60%.
+    const eqLitros = (kg >= 4.5 && kg <= 6.5) ? 4 : ((kg >= 24 && kg <= 26) ? 20 : num(p.factor_envase_tinto || p.factor_tinto));
+    const pct = { PASTEL:0.25, TINT:0.40, DEEP:0.60, ACCENT:1 }[b];
+    if(!pct) return num(p.factor_tinto);
+    return eqLitros * pct;
+  }
+
   return num(p.factor_tinto);
 }
 
@@ -322,12 +332,18 @@ function compatibleBasesForProduct(p){
     return ['PASTEL','TINT','DEEP'];
   }
 
+  // Base Revestimiento es una base física única: acepta PASTEL/TINT/DEEP/ACCENT
+  // y aplica factor/porcentaje propio según base fórmula.
+  if(tipo === 'BASE_REVESTIMIENTO'){
+    return ['PASTEL','TINT','DEEP','ACCENT'];
+  }
+
   // Accent especial usa lata/fórmula ACCENT.
   if((tipo === 'TEXTURA' || tipo === 'AGRESTE') && (fisica === 'ACCENT' || base === 'ACCENT')){
     return ['ACCENT'];
   }
 
-  return base ? [base] : [];
+  return base && base !== 'MULTI' ? [base] : [];
 }
 
 function findRecipe(base, color){
