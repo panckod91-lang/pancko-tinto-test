@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Pancko Tinto v0.3</title>
+<title>Pancko Tinto v0.4</title>
 <style>
   :root{
     --bg:#0f172a;--card:#111827;--card2:#1f2937;--txt:#f8fafc;--muted:#94a3b8;
@@ -44,7 +44,7 @@
 </head>
 <body>
 <header>
-  <h1>Pancko Tinto <span class="muted">v0.3 test</span></h1>
+  <h1>Pancko Tinto <span class="muted">v0.4 test</span></h1>
   <nav>
     <button id="btnPresu" class="active" onclick="showTab('presu')">Presupuesto</button>
     <button id="btnLab" onclick="showTab('lab')">Consulta laboratorio</button>
@@ -266,7 +266,7 @@ function renderPresuProduct(){
     <div><b>${p.ARTIC||''}</b></div>
     <div class="muted">COD: ${p.COD||''}</div>
     <div>Precio: <b>${money(num(p.PR_CON_IVA))}</b></div>
-    ${tint ? `<div><span class="pill">TINTABLE</span><span class="pill">Base ${p.base_tinto}</span><span class="pill">Factor ${p.factor_tinto}</span></div>` : `<div><span class="pill">Producto común</span></div>`}
+    ${tint ? `<div><span class="pill">${p.tipo_tinto || 'TINTABLE'}</span><span class="pill">Base ${p.base_tinto}</span><span class="pill">Física ${p.base_fisica_tinto || p.base_tinto}</span><span class="pill">Factor ${p.factor_tinto}</span></div>` : `<div><span class="pill">Producto común</span></div>`}
   `;
 }
 
@@ -278,9 +278,73 @@ function extractColorId(value){
   return s;
 }
 
+function factorForSpecial(p, base){
+  const tipo = normKey(p.tipo_tinto);
+  const kg = num(p.kilos_reales);
+  const b = normKey(base);
+
+  if(tipo === 'TEXTURA'){
+    const factor25 = { PASTEL:3, TINT:5, DEEP:7, ACCENT:6 }[b];
+    if(!factor25) return num(p.factor_tinto);
+    if(kg >= 24 && kg <= 26) return factor25;
+    if(kg >= 4.5 && kg <= 6.5) return factor25 / 5;
+    if(kg > 0) return factor25 * kg / 25;
+    return factor25;
+  }
+
+  if(tipo === 'AGRESTE'){
+    const factor30 = { PASTEL:3, TINT:4, DEEP:6, ACCENT:6 }[b];
+    if(!factor30) return num(p.factor_tinto);
+    if(kg >= 29 && kg <= 31) return factor30;
+    if(kg >= 24 && kg <= 26) return factor30 * 25 / 30;
+    if(kg >= 5.5 && kg <= 6.5) return factor30 / 5;
+    if(kg > 0) return factor30 * kg / 30;
+    return factor30;
+  }
+
+  return num(p.factor_tinto);
+}
+
+function compatibleBasesForProduct(p){
+  if(!p || !isTintable(p)) return [];
+  const tipo = normKey(p.tipo_tinto);
+  const fisica = normKey(p.base_fisica_tinto || p.base_tinto);
+  const base = normKey(p.base_tinto);
+
+  // Texturas/agrestes con lata física blanca: el color puede vivir en PASTEL, TINT o DEEP.
+  // La fórmula se busca en esa base, pero la lata sigue siendo blanca.
+  if((tipo === 'TEXTURA' || tipo === 'AGRESTE') && fisica === 'BLANCO'){
+    return ['PASTEL','TINT','DEEP'];
+  }
+
+  // Accent especial usa lata/fórmula ACCENT.
+  if((tipo === 'TEXTURA' || tipo === 'AGRESTE') && (fisica === 'ACCENT' || base === 'ACCENT')){
+    return ['ACCENT'];
+  }
+
+  return base ? [base] : [];
+}
+
 function findRecipe(base, color){
   const id = extractColorId(color);
   return recipeIndex.get(normKey(base)+'|'+normKey(id));
+}
+
+function findRecipeForProduct(p, color){
+  const id = extractColorId(color);
+  const bases = compatibleBasesForProduct(p);
+  for(const base of bases){
+    const rec = findRecipe(base, id);
+    if(rec){
+      return {
+        rec,
+        base_formula: base,
+        base_fisica: normKey(p.base_fisica_tinto || p.base_tinto || base),
+        factor: factorForSpecial(p, base)
+      };
+    }
+  }
+  return null;
 }
 
 function recipeLabel(r){
@@ -297,15 +361,15 @@ function renderColorOptions(mode){
   if(!p || !isTintable(p)){ list.innerHTML=''; return; }
 
   const q = normKey(input.value);
-  const base = normKey(p.base_tinto);
+  const bases = compatibleBasesForProduct(p);
   const matches = [];
   for(const r of recetas){
-    if(normKey(r.base) !== base) continue;
+    if(!bases.includes(normKey(r.base))) continue;
     const id = normKey(r.idcolor || r.codigo_formula);
     const desc = normKey(r.descripcion);
     if(!q || id.includes(q) || desc.includes(q)){
       matches.push(r);
-      if(matches.length >= 80) break;
+      if(matches.length >= 100) break;
     }
   }
 
@@ -318,9 +382,13 @@ function escapeHtml(s){
 
 function calcRecipeForProduct(p, color){
   if(!isTintable(p)) return {ok:false, msg:'Producto no tintable.'};
-  const rec=findRecipe(p.base_tinto, color);
-  if(!rec) return {ok:false, msg:`El color ${color||''} no existe para base ${p.base_tinto}.`};
-  const factor=num(p.factor_tinto);
+
+  const found = findRecipeForProduct(p, color);
+  const bases = compatibleBasesForProduct(p).join(' / ');
+  if(!found) return {ok:false, msg:`El color ${extractColorId(color)||''} no existe para las bases compatibles: ${bases}.`};
+
+  const rec = found.rec;
+  const factor = found.factor;
   const parts=parseFormula(rec.formula_1l);
   const lines=parts.map(x=>{
     const pulsos=x.pulsos1*factor;
@@ -328,7 +396,15 @@ function calcRecipeForProduct(p, color){
     return {...x, pulsos, precioPulso, subtotal:pulsos*precioPulso};
   });
   const tintCost=lines.reduce((a,b)=>a + b.subtotal,0);
-  return {ok:true, rec, factor, lines, tintCost};
+  return {
+    ok:true,
+    rec,
+    factor,
+    lines,
+    tintCost,
+    base_formula: found.base_formula,
+    base_fisica: found.base_fisica
+  };
 }
 
 function calcPresuPreview(){
@@ -342,6 +418,7 @@ function calcPresuPreview(){
   const basePrice=num(selectedPresu.PR_CON_IVA);
   box.innerHTML=`
     <div class="oktxt"><b>Compatible</b>: ${res.rec.idcolor} / ${res.rec.descripcion||''}</div>
+    <div class="muted">Base fórmula: ${res.base_formula} · Base física: ${res.base_fisica} · Factor: ${Number(res.factor.toFixed(6))}</div>
     <div>Producto: ${money(basePrice)}</div>
     <div>Tintas: <b>${money(res.tintCost)}</b></div>
     <div>Total unitario: <b>${money(basePrice+res.tintCost)}</b></div>
@@ -360,7 +437,7 @@ function addToBudget(){
     tintCost=res.tintCost; formula=res.lines;
   }
   const unit=num(p.PR_CON_IVA)+tintCost;
-  budget.push({p, qty, color, tintCost, unit, formula, cliente:document.getElementById('clientePresu').value.trim()});
+  budget.push({p, qty, color, tintCost, unit, formula, base_formula:res?.base_formula, base_fisica:res?.base_fisica, cliente:document.getElementById('clientePresu').value.trim()});
   renderBudget();
 }
 
@@ -373,7 +450,7 @@ function renderBudget(){
     return `<div class="item">
       <b>${idx+1}) ${it.p.ARTIC}</b>
       <div class="muted">COD: ${it.p.COD} · Cant: ${it.qty}</div>
-      ${it.color?`<div>Color: <b>${it.color}</b> · Base: ${it.p.base_tinto} · Tintas: ${money(it.tintCost)}</div>`:''}
+      ${it.color?`<div>Color: <b>${it.color}</b> · Base fórmula: ${it.base_formula || it.p.base_tinto} · Base física: ${it.base_fisica || it.p.base_fisica_tinto || it.p.base_tinto} · Tintas: ${money(it.tintCost)}</div>`:''}
       ${it.cliente?`<div class="muted">Cliente/nota: ${it.cliente}</div>`:''}
       <div class="right"><b>${money(line)}</b></div>
     </div>`;
@@ -388,7 +465,7 @@ function renderLabInfo(){
   const p=selectedLab;
   box.innerHTML=`<b>${p.ARTIC||''}</b><br>
     <span class="muted">COD: ${p.COD||''}</span><br>
-    ${isTintable(p)?`<span class="pill">Base ${p.base_tinto}</span><span class="pill">Factor ${p.factor_tinto}</span>`:`<span class="pill">No tintable</span>`}`;
+    ${isTintable(p)?`<span class="pill">${p.tipo_tinto || 'TINTABLE'}</span><span class="pill">Base ${p.base_tinto}</span><span class="pill">Física ${p.base_fisica_tinto || p.base_tinto}</span><span class="pill">Factor ${p.factor_tinto}</span>`:`<span class="pill">No tintable</span>`}`;
 }
 
 function pulseToOz(p){
@@ -412,8 +489,9 @@ function calcLab(){
   out.innerHTML=`
     <div class="copy"><b>${p.ARTIC}</b>
 Color: ${rec.idcolor}
-Base: ${p.base_tinto}
-Factor: ${p.factor_tinto}
+Base fórmula: ${res.base_formula}
+Base física: ${res.base_fisica}
+Factor: ${Number(res.factor.toFixed(6))}
 ${rec.descripcion?`Descripción: ${rec.descripcion}`:''}</div>
     ${res.lines.map(x=>`
       <div class="formulaLine">
