@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Pancko Tinto v0.6</title>
+<title>Pancko Tinto v0.8</title>
 <style>
   :root{
     --bg:#0f172a;--card:#111827;--card2:#1f2937;--txt:#f8fafc;--muted:#94a3b8;
@@ -44,7 +44,7 @@
 </head>
 <body>
 <header>
-  <h1>Pancko Tinto <span class="muted">v0.6 test</span></h1>
+  <h1>Pancko Tinto <span class="muted">v0.8 test</span></h1>
   <nav>
     <button id="btnPresu" class="active" onclick="showTab('presu')">Presupuesto</button>
     <button id="btnLab" onclick="showTab('lab')">Consulta laboratorio</button>
@@ -137,6 +137,16 @@
       <button onclick="saveAll()">Guardar</button>
       <button class="bad" onclick="resetAll()">Borrar datos</button>
     </div>
+
+    <div class="card">
+      <div class="big" style="font-size:18px">Actualizar solo precios</div>
+      <p class="muted">Importa un CSV de Yoppen y actualiza solo PR_CON_IVA por COD. Si el producto no existe, lo agrega como producto común. No toca la lógica tintométrica.</p>
+      <label>CSV precios Yoppen: precios_yoppen_22-5-26_normalizado_v8_solo_con_iva.csv</label>
+      <input type="file" id="filePreciosYoppen" accept=".csv,text/csv" />
+      <button class="warn" style="margin-top:10px" onclick="updatePricesFromYoppenCsv()">Actualizar precios desde CSV</button>
+      <div id="priceUpdateStatus" class="muted" style="margin-top:8px"></div>
+    </div>
+
     <div id="dataStatus" class="card"></div>
   </div>
 
@@ -536,6 +546,82 @@ async function loadCsvFiles(){
   if(fr){ recetas=parseCSV(await readFile(fr)); }
   buildIndexes();
   saveAll();
+}
+
+function getAnyField(row, names){
+  for(const name of names){
+    if(row[name] !== undefined && String(row[name]).trim() !== '') return row[name];
+  }
+  const keys = Object.keys(row);
+  for(const name of names){
+    const wanted = normKey(name);
+    const k = keys.find(x => normKey(x) === wanted);
+    if(k && String(row[k]).trim() !== '') return row[k];
+  }
+  return '';
+}
+
+function normalizePriceNumber(v){
+  let s = String(v ?? '').trim().replace(/\$/g,'').replace(/\s/g,'');
+  if(s.includes(',') && s.includes('.')) s = s.replace(/\./g,'').replace(',', '.');
+  else s = s.replace(',', '.');
+  return Number(s) || 0;
+}
+
+function makeBlankProduct(){
+  const template = articulos[0] || {};
+  const obj = {};
+  Object.keys(template).forEach(k => obj[k] = '');
+  return obj;
+}
+
+async function updatePricesFromYoppenCsv(){
+  const fp = document.getElementById('filePreciosYoppen').files[0];
+  if(!fp){ alert('Elegí el CSV de precios Yoppen.'); return; }
+
+  const rows = parseCSV(await readFile(fp));
+  if(!rows.length){ alert('El CSV no tiene filas.'); return; }
+
+  const byCode = new Map();
+  articulos.forEach(p => byCode.set(String(p.COD || '').trim(), p));
+
+  let updated = 0, added = 0, tintPrices = 0, skipped = 0;
+  const colorants = new Set(['AXX','B','C','D','E','F','I','KX','L','M','R','SS','T','V']);
+
+  for(const row of rows){
+    const cod = String(getAnyField(row, ['COD','Artículo','Articulo','Código','Codigo'])).trim();
+    const desc = String(getAnyField(row, ['ARTIC','Descripción','Descripcion','Artículo descripción','Articulo descripcion'])).trim();
+    const price = normalizePriceNumber(getAnyField(row, ['PR_CON_IVA','P. C.F.','P.C.F.','P CF','Precio','Precio Final','P_VTA','P. Vta']));
+    if(!cod || price <= 0){ skipped++; continue; }
+
+    let p = byCode.get(cod);
+    if(p){
+      p.PR_CON_IVA = price.toFixed(2);
+      if(!p.ARTIC && desc) p.ARTIC = desc;
+      updated++;
+    }else{
+      p = makeBlankProduct();
+      p.COD = cod;
+      p.ARTIC = desc || cod;
+      p.PR_CON_IVA = price.toFixed(2);
+      p.usa_tinto = 'NO';
+      p.regla_tinto = 'AGREGADO_DESDE_YOPPEN';
+      p.observacion_tinto = 'Producto agregado desde CSV de precios Yoppen.';
+      articulos.push(p);
+      byCode.set(cod, p);
+      added++;
+    }
+
+    if(colorants.has(normKey(cod)) && normKey(desc).includes('PULSO DE COLORANTE')){
+      colorantPrices[normKey(cod)] = price;
+      tintPrices++;
+    }
+  }
+
+  buildIndexes();
+  saveAll();
+  document.getElementById('priceUpdateStatus').innerHTML =
+    `<b>Actualización lista:</b> ${updated} actualizados · ${added} agregados · ${tintPrices} precios de tintas · ${skipped} omitidos`;
 }
 function saveAll(){
   localStorage.setItem(LS_ART, JSON.stringify(articulos));
